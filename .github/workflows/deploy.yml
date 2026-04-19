@@ -1,0 +1,138 @@
+name: Deploy CareerCoach AI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (dev or prod)"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+permissions:
+  id-token: write   # Required for OIDC token generation
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.DEFAULT_AWS_REGION }}
+  TF_WORKSPACE: ${{ github.event.inputs.environment || 'dev' }}
+
+jobs:
+  deploy:
+    name: Terraform + Lambda + Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Configure AWS credentials via OIDC ────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.DEFAULT_AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      # ── 3. Set up Python and package Lambda ──────────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Package Lambda function
+        run: |
+          chmod +x infra/package.sh
+          ./infra/package.sh
+
+      # ── 4. Set up Terraform ──────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Select or create workspace
+        working-directory: infra
+        run: |
+          terraform workspace select ${{ env.TF_WORKSPACE }} || \
+          terraform workspace new ${{ env.TF_WORKSPACE }}
+
+      - name: Terraform Validate
+        working-directory: infra
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: terraform plan -input=false
+
+      - name: Apply Terraform
+        working-directory: infra
+        run: terraform apply -auto-approve -input=false
+
+      # ── 5. Capture outputs ───────────────────────────────────────────
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: infra
+        run: |
+          echo "api_url=$(terraform output -raw api_gateway_url)" >> $GITHUB_OUTPUT
+          echo "cf_domain=$(terraform output -raw cloudfront_domain)" >> $GITHUB_OUTPUT
+          echo "bucket=$(terraform output -raw frontend_bucket)" >> $GITHUB_OUTPUT
+
+      # ── 6. Update Secrets Manager with CloudFront URL ─────────────────
+      - name: Update CORS_ORIGINS in Secrets Manager
+        working-directory: infra
+        run: |
+          SECRET=$(terraform output -raw secret_name)
+          CF=$(terraform output -raw cloudfront_domain)
+          aws secretsmanager update-secret \
+            --secret-id "$SECRET" \
+            --secret-string "{\"CORS_ORIGINS\": \"https://${CF}\"}" \
+            --region ${{ secrets.DEFAULT_AWS_REGION }}
+
+      # ── 7. Build Next.js frontend ────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build Next.js app
+        env:
+          NEXT_PUBLIC_API_URL: ${{ steps.tf_outputs.outputs.api_url }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      # ── 8. Deploy frontend to S3 ──────────────────────────────────────
+      - name: Sync frontend to S3
+        run: |
+          aws s3 sync out/ s3://${{ steps.tf_outputs.outputs.bucket }}/ --delete
+
+      # ── 9. Invalidate CloudFront cache ───────────────────────────────
+      - name: Invalidate CloudFront cache
+        run: |
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?DomainName=='${{ steps.tf_outputs.outputs.cf_domain }}'].Id" \
+            --output text)
+          aws cloudfront create-invalidation \
+            --distribution-id "$DIST_ID" \
+            --paths "/*"
+
+      # ── 10. Deployment summary ────────────────────────────────────────
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| CloudFront URL | https://${{ steps.tf_outputs.outputs.cf_domain }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API Gateway URL | ${{ steps.tf_outputs.outputs.api_url }} |" >> $GITHUB_STEP_SUMMARY

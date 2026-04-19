@@ -1,0 +1,50 @@
+# Environment variables — NEVER commit
+.env
+.env.local
+.env.*.local
+
+# Terraform state and sensitive files
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate*
+crash.log
+# terraform.lock.hcl SHOULD be committed (pins provider versions)
+
+# Lambda build artefacts
+infra/lambda.zip
+lambda.zip
+lambda_function.zip
+package/
+
+# Node.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+.vercel
