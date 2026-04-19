@@ -48,3 +48,9 @@ env/
 Thumbs.db
 
 .vercel
+
+# Local / assignment docs — keep out of remote
+*.docx
+~$*.docx
+Final Project AIE1018.md
+FinalProject_AIE1018_StudentName.md
