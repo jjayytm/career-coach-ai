@@ -7,7 +7,10 @@ resource "aws_apigatewayv2_api" "main" {
     allow_origins = ["https://${aws_cloudfront_distribution.main.domain_name}"]
     max_age       = 300
   }
-  tags = { Project = var.project_name; ManagedBy = "terraform" }
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
 }
 
 resource "aws_apigatewayv2_stage" "default" {

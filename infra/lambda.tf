@@ -2,10 +2,16 @@ resource "aws_iam_role" "lambda_exec" {
   name = "${local.name_prefix}-lambda-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{ Action = "sts:AssumeRole"; Effect = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" } }]
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
   })
-  tags = { Project = var.project_name; ManagedBy = "terraform" }
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "logs" {
@@ -28,7 +34,9 @@ resource "aws_iam_role_policy" "secrets" {
   role = aws_iam_role.lambda_exec.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{ Effect = "Allow"; Action = ["secretsmanager:GetSecretValue"]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
       Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/*"
     }]
   })
@@ -61,5 +69,8 @@ resource "aws_lambda_function" "api" {
     aws_iam_role_policy_attachment.dynamodb,
     aws_iam_role_policy_attachment.bedrock,
   ]
-  tags = { Project = var.project_name; ManagedBy = "terraform" }
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
 }

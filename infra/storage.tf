@@ -3,25 +3,38 @@ resource "aws_dynamodb_table" "conversations" {
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "session_id"
 
-  attribute { name = "session_id"; type = "S" }
+  attribute {
+    name = "session_id"
+    type = "S"
+  }
 
   ttl {
     attribute_name = "ttl"
     enabled        = true
   }
 
-  tags = { Project = var.project_name; ManagedBy = "terraform" }
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
 }
 
 resource "aws_s3_bucket" "frontend" {
   bucket = "${local.name_prefix}-frontend-${data.aws_caller_identity.current.account_id}"
-  tags   = { Project = var.project_name; ManagedBy = "terraform" }
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
 }
 
 resource "aws_s3_bucket_website_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
-  index_document { suffix = "index.html" }
-  error_document { key    = "index.html" }
+  index_document {
+    suffix = "index.html"
+  }
+  error_document {
+    key = "index.html"
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -37,8 +50,13 @@ resource "aws_s3_bucket_policy" "frontend_public" {
   depends_on = [aws_s3_bucket_public_access_block.frontend]
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{ Sid = "PublicRead"; Effect = "Allow"; Principal = "*"
-      Action = "s3:GetObject"; Resource = "${aws_s3_bucket.frontend.arn}/*" }]
+    Statement = [{
+      Sid       = "PublicRead"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.frontend.arn}/*"
+    }]
   })
 }
 
@@ -51,5 +69,7 @@ resource "aws_secretsmanager_secret" "config" {
 resource "aws_secretsmanager_secret_version" "config" {
   secret_id     = aws_secretsmanager_secret.config.id
   secret_string = jsonencode({ CORS_ORIGINS = "REPLACE_WITH_CLOUDFRONT_URL_AFTER_APPLY" })
-  lifecycle { ignore_changes = [secret_string] }
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
