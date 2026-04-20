@@ -57,14 +57,19 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=job-coach-tfstate-490841876944" \
+            -backend-config="key=career-coach/terraform.tfstate" \
+            -backend-config="region=us-east-1"
 
       - name: Select or create workspace
         working-directory: infra
         env:
           TF_WORKSPACE: default
         run: |
-          terraform workspace new ${{ github.event.inputs.environment || 'dev' }} 2>/dev/null || true
+          terraform workspace new ${{ github.event.inputs.environment || 'dev' }} 2>/dev/null || \
+          terraform workspace select ${{ github.event.inputs.environment || 'dev' }}
 
       - name: Terraform Validate
         working-directory: infra
