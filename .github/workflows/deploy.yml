@@ -61,9 +61,10 @@ jobs:
 
       - name: Select or create workspace
         working-directory: infra
+        env:
+          TF_WORKSPACE: default
         run: |
-          terraform workspace select ${{ env.TF_WORKSPACE }} || \
-          terraform workspace new ${{ env.TF_WORKSPACE }}
+          terraform workspace new ${{ github.event.inputs.environment || 'dev' }} 2>/dev/null || true
 
       - name: Terraform Validate
         working-directory: infra
